@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 import plotly.express as px
-import plotly.graph_objects as go
+import plotly.graph_objects as go # Plotly for advanced charts
 
 # --- 1. 환경 설정 및 API 키 ---
 
@@ -69,9 +69,11 @@ def process_data(raw_data):
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
     
-    # 텍스트 포맷팅을 위한 컬럼 추가
+    # 텍스트 포맷팅을 위한 컬럼 추가 (KeyError 해결을 위해 매출액 포맷팅 추가)
     df['주간 관객수 (포맷)'] = df['주간 관객수'].apply(lambda x: f'{x:,.0f} 명')
     df['누적 관객수 (포맷)'] = df['누적 관객수'].apply(lambda x: f'{x:,.0f} 명')
+    df['주간 매출액 (포맷)'] = df['주간 매출액'].apply(lambda x: f'{x:,.0f} 원')
+    df['누적 매출액 (포맷)'] = df['누적 매출액'].apply(lambda x: f'{x:,.0f} 원')
     
     return df
 
@@ -133,10 +135,12 @@ def show_basic_box_office(df):
     """기본 테이블 및 주간 관객수 바 차트를 보여줍니다."""
     st.markdown("### 🥇 주간 박스오피스 순위 테이블")
     
+    # [수정됨] 이제 모든 포맷팅 컬럼이 process_data에 정의되었으므로 KeyError가 해결됩니다.
     display_cols_formatted = [
         '순위', '영화명', '개봉일', 
         '주간 관객수 (포맷)', '누적 관객수 (포맷)', '주간 매출액 (포맷)', '누적 매출액 (포맷)'
     ]
+    
     df_display = df[display_cols_formatted].copy()
     rename_map = {col: col.replace(' (포맷)', '') for col in display_cols_formatted}
     df_display.rename(columns=rename_map, inplace=True)
@@ -181,6 +185,8 @@ def show_contributor_analysis(df):
     )])
     fig.update_layout(title_text="주간 박스오피스 배급사별 관객수 기여 비율")
     st.plotly_chart(fig, use_container_width=True)
+    
+    st.info("이 분석을 완성하려면, 영화별 상세 API 호출을 통해 '배급사' 또는 '감독' 정보를 가져와 그룹화해야 합니다.")
 
 def show_daily_trend_analysis(df):
     """[A+ 기능] 일일 트렌드 분석 및 주말 의존도를 계산합니다."""
@@ -188,8 +194,6 @@ def show_daily_trend_analysis(df):
     
     # 이 API(weeklyBoxOfficeList)로는 일별 관객수를 직접 가져올 수 없습니다. 
     # 따라서, 분석 아이디어를 구현하기 위해 임시 주말/평일 관객 비율을 계산합니다.
-    
-    # (실제 구현에서는 KOFIC의 DailyBoxOffice API를 사용해 월~일까지의 7일 데이터를 가져와야 함)
     
     # **A+ 구현을 위한 가상의 주말 의존도 로직:**
     # 주간 관객수와 누적 관객수를 이용한 가상의 안정성 지표 생성
