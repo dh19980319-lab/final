@@ -69,7 +69,7 @@ def process_data(raw_data):
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
     
-    # 텍스트 포맷팅을 위한 컬럼 추가
+    # 텍스트 포맷팅을 위한 컬럼 추가 (원본 숫자형 컬럼 보존)
     df['주간 관객수 (포맷)'] = df['주간 관객수'].apply(lambda x: f'{x:,.0f} 명')
     df['누적 관객수 (포맷)'] = df['누적 관객수'].apply(lambda x: f'{x:,.0f} 명')
     df['주간 매출액 (포맷)'] = df['주간 매출액'].apply(lambda x: f'{x:,.0f} 원')
@@ -83,14 +83,24 @@ def show_basic_box_office(df):
     """기본 테이블 및 주간 관객수 바 차트를 보여줍니다."""
     st.markdown("### 🥇 주간 박스오피스 순위 테이블")
     
-    display_cols = ['순위', '영화명', '개봉일', '주간 관객수 (포맷)', '누적 관객수 (포맷)', '주간 매출액 (포맷)', '누적 매출액 (포맷)']
-    df_display = df.rename(columns={col: col.replace(' (포맷)', '') for col in display_cols})
+    # [수정됨] 중복 오류 방지를 위해 필요한 컬럼만 명시적으로 선택하여 복사
+    display_cols_formatted = [
+        '순위', '영화명', '개봉일', 
+        '주간 관객수 (포맷)', '누적 관객수 (포맷)', '주간 매출액 (포맷)', '누적 매출액 (포맷)'
+    ]
+    
+    # 선택된 컬럼만으로 새로운 데이터프레임 생성
+    df_display = df[display_cols_formatted].copy()
+    
+    # 화면 표시용으로 컬럼 이름 변경 (포맷 접미사 제거)
+    rename_map = {col: col.replace(' (포맷)', '') for col in display_cols_formatted}
+    df_display.rename(columns=rename_map, inplace=True)
     
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.markdown("### 📊 주간 관객수 시각화")
     
-    # Plotly Express를 사용하여 바 차트 생성
+    # Plotly Express를 사용하여 바 차트 생성 (숫자형 원본 컬럼 사용)
     fig = px.bar(
         df,
         x='영화명',
@@ -109,13 +119,6 @@ def show_basic_box_office(df):
 def show_contributor_analysis(df):
     """주간 관객수 기준으로 감독 및 배급사의 기여도를 분석합니다."""
     st.markdown("### 🎬 배급사별 주간 관객수 기여도 분석")
-    
-    # 배급사(distributor) 정보를 가져와야 하지만, weeklyBoxOfficeList API에는 이 정보가 직접 포함되어 있지 않습니다.
-    # 여기서는 '영화명'을 기준으로 그룹화하여 분석의 아이디어를 구현합니다.
-    # *실제 구현을 위해서는 movieCd API를 통해 배급사 정보를 추가로 가져와야 합니다.*
-
-    # 임시로 '영화명' 기준으로 '주간 관객수'를 총합하여 기여도를 보여줍니다.
-    # (실제 배급사 데이터가 없으므로 '영화명'을 통해 관객 기여도가 높았던 영화를 다시 강조하는 방식으로 구현)
     
     contributor_df = df.sort_values(by='주간 관객수', ascending=False)
     contributor_df['기여도 (%)'] = (contributor_df['주간 관객수'] / contributor_df['주간 관객수'].sum()) * 100
@@ -141,29 +144,20 @@ def show_contributor_analysis(df):
 
 # --- 3. Streamlit UI 및 메인 로직 ---
 
-# 미적 품질 향상: Custom CSS for a cinematic theme (Dark background, Neon accent)
+# 미적 품질 향상: Custom CSS
 custom_css = """
 <style>
-/* Streamlit 기본 테마를 오버라이드하여 다크 모드를 강화합니다. */
 .stApp {
-    background-color: #0b0f16; /* Dark Navy/Black for cinematic feel */
+    background-color: #0b0f16;
     color: #f0f2f6;
 }
-/* 제목 및 강조 색상 (Neon Accent) */
 h1, h2, h3, .stSidebar h1, .stButton>button {
-    color: #00ff73; /* Neon Green/Lime */
+    color: #00ff73;
 }
-/* 사이드바 배경 */
 .css-1d391kg {
-    background-color: #1a1a2e; /* Slightly lighter dark color for sidebar */
+    background-color: #1a1a2e;
     border-right: 1px solid #00ff7344;
 }
-/* 데이터프레임 헤더 (테이블) */
-.css-1ftarrss {
-    background-color: #334155;
-    color: #fff;
-}
-/* 탭 선택 강조 */
 .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
     border-bottom: 2px solid #00ff73 !important;
     color: #00ff73 !important;
@@ -180,7 +174,6 @@ st.markdown("KOFIC 오픈 API를 활용하여 주간 박스오피스 순위 및 
 
 # --- 날짜 선택 위젯 및 데이터 로드 ---
 
-# KOFIC 데이터는 전주 일요일까지의 데이터만 제공
 today = datetime.now().date()
 days_to_subtract = (today.weekday() + 1) % 7
 default_target_date = today - timedelta(days=days_to_subtract)
@@ -207,8 +200,6 @@ if raw_data:
     df = process_data(raw_data)
     
     st.success(f"✅ {selected_date.strftime('%Y년 %m월 %d일')} 기준 박스오피스 데이터를 로드했습니다. (총 {len(df)}개)")
-    
-    # --- 탭 기반 분석 구조 (창의성/심층 분석 점수 향상) ---
     
     tab1, tab2 = st.tabs(["📊 기본 박스오피스 순위", "🏆 감독/회사 기여 분석 (심층)"])
     
